@@ -275,7 +275,6 @@ var (
 )
 
 func CountNeeds(totals *Totals, recipe Recipe) {
-
 	for _, need := range recipe.Needs {
 		period := recipe.Time / need.Recipe.Time               // How many cycles of the needed Product occur during the needing Product's cycle
 		periodProductionAmount := period * need.Recipe.Amount  // How many needed Products are produced during the needing Product's cycle
