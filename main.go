@@ -9,289 +9,259 @@ import (
 // * Recipe selection
 // * Figure out how to show mining requirements by ore/min instead of buildings (with static size and purity)
 
-type Totals map[string]float64
-
-type Recipe struct {
-	Name   string
-	Time   float64 // how long it takes for a cycle to complete
-	Amount float64 // how many are produced each cycle
-	Needs  []Need  // what Products are used to build this Product
+type RecipeBook struct {
+	Default    Recipe
+	Alternates map[string]Recipe // The map keys are the Recipe names
 }
 
-type Need struct {
-	Recipe Recipe
-	Amount float64 // how many products are required to fulfill this need
+type Product struct {
+	Recipes RecipeBook
+}
+
+type Recipe struct {
+	Time        float64      // How long it takes for a cycle to complete
+	Amount      float64      // How many Products are produced each cycle
+	Ingredients []Ingredient // What Ingredients are used in this Recipe
+}
+
+type Ingredient struct {
+	ProductName string
+	Amount      float64 // How many products are required to fulfill this need
+}
+
+type Tally struct {
+	Extracted map[string]float64
+	Processed map[string]float64
 }
 
 var (
-	AdaptiveControlUnit = Recipe{
-		"Adaptive Control Unit",
-		120,
-		2,
-		[]Need{
-			{AutomatedWiring, 15},
-			{CircuitBoard, 10},
-			{HeavyModularFrame, 2},
-			{Computer, 2},
-		},
+	ActiveAlternates = map[string]string{
+		"Screw":    "Cast Screw",
+		"Iron Rod": "Steel Rod",
 	}
 
-	AutomatedWiring = Recipe{
-		"Automated Wiring",
-		24,
-		1,
-		[]Need{
-			{Stator, 1},
-			{Cable, 20},
-		},
-	}
+	Products = map[string]Product{
+		// Mined
+		"Coal":       {RecipeBook{Recipe{0, 0, []Ingredient{}}, map[string]Recipe{}}},
+		"Copper Ore": {RecipeBook{Recipe{0, 0, []Ingredient{}}, map[string]Recipe{}}},
+		"Iron Ore":   {RecipeBook{Recipe{0, 0, []Ingredient{}}, map[string]Recipe{}}},
+		"Limestone":  {RecipeBook{Recipe{0, 0, []Ingredient{}}, map[string]Recipe{}}},
 
-	CircuitBoard = Recipe{
-		"Circuit Board",
-		8,
-		1,
-		[]Need{
-			{CopperSheet, 2},
-			{Plastic, 4},
-		},
-	}
+		// Extracted
+		"Crude Oil": {RecipeBook{Recipe{0, 0, []Ingredient{}}, map[string]Recipe{}}},
 
-	HeavyModularFrame = Recipe{
-		"Heavy Modular Frame",
-		30,
-		1,
-		[]Need{
-			{ModularFrame, 5},
-			{SteelPipe, 15},
-			{EncasedIndustrialBeam, 5},
-			{Screw, 100},
-		},
-	}
+		// Smelted
+		"Concrete": {RecipeBook{
+			Recipe{4, 1, []Ingredient{
+				{"Limestone", 3},
+			}},
+			map[string]Recipe{},
+		}},
 
-	Computer = Recipe{
-		"Computer",
-		24,
-		1,
-		[]Need{
-			{CircuitBoard, 10},
-			{Cable, 9},
-			{Plastic, 18},
-			{Screw, 52},
-		},
-	}
+		"Copper Ingot": {RecipeBook{
+			Recipe{2, 1, []Ingredient{
+				{"Copper Ore", 1},
+			}},
+			map[string]Recipe{},
+		}},
 
-	Stator = Recipe{
-		"Stator",
-		12,
-		1,
-		[]Need{
-			{SteelPipe, 3},
-			{Wire, 8},
-		},
-	}
+		"Iron Ingot": {RecipeBook{
+			Recipe{2, 1, []Ingredient{
+				{"Iron Ore", 1},
+			}}, map[string]Recipe{},
+		}},
 
-	Cable = Recipe{
-		"Cable",
-		2,
-		1,
-		[]Need{
-			{Wire, 2},
-		},
-	}
+		// Foundried (lol)
+		"Steel Ingot": {RecipeBook{
+			Recipe{4, 3, []Ingredient{
+				{"Iron Ore", 3},
+				{"Coal", 3},
+			}},
+			map[string]Recipe{},
+		}},
 
-	CopperSheet = Recipe{
-		"Copper Sheet",
-		6,
-		1,
-		[]Need{
-			{CopperIngot, 2},
-		},
-	}
+		// Constructed
+		"Cable": {RecipeBook{
+			Recipe{2, 1, []Ingredient{
+				{"Wire", 2},
+			}},
+			map[string]Recipe{},
+		}},
 
-	Plastic = Recipe{ // By-product not configured
-		"Plastic",
-		6,
-		2,
-		[]Need{
-			{CrudeOil, 3},
-		},
-	}
+		"Copper Sheet": {RecipeBook{
+			Recipe{6, 1, []Ingredient{
+				{"Copper Ingot", 2},
+			}},
+			map[string]Recipe{},
+		}},
 
-	ModularFrame = Recipe{
-		"Modular Frame",
-		60,
-		2,
-		[]Need{
-			{ReinforcedIronPlate, 3},
-			{IronRod, 12},
-		},
-	}
+		"Iron Plate": {RecipeBook{
+			Recipe{6, 2, []Ingredient{
+				{"Iron Ingot", 3},
+			}}, map[string]Recipe{},
+		}},
 
-	SteelPipe = Recipe{
-		"Steel Pipe",
-		6,
-		2,
-		[]Need{
-			{SteelIngot, 3},
-		},
-	}
+		"Iron Rod": {RecipeBook{
+			Recipe{4, 1, []Ingredient{
+				{"Iron Ingot", 1},
+			}},
+			map[string]Recipe{
+				"Steel Rod": {5, 4, []Ingredient{
+					{"Steel Ingot", 1},
+				}},
+			},
+		}},
 
-	EncasedIndustrialBeam = Recipe{
-		"Encased Industrial Beam",
-		10,
-		1,
-		[]Need{
-			{SteelBeam, 4},
-			{Concrete, 5},
-		},
-	}
+		"Screw": {RecipeBook{
+			Recipe{6, 4, []Ingredient{
+				{"Iron Rod", 1},
+			}},
+			map[string]Recipe{
+				"Cast Screw": {24, 20, []Ingredient{
+					{"Iron Ingot", 5},
+				}},
+			},
+		}},
 
-	Screw = Recipe{
-		"Screw",
-		6,
-		4,
-		[]Need{
-			{IronRod, 1},
-		},
-	}
+		"Steel Beam": {RecipeBook{
+			Recipe{4, 1, []Ingredient{
+				{"Steel Ingot", 4},
+			}},
+			map[string]Recipe{},
+		}},
 
-	Wire = Recipe{
-		"Wire",
-		4,
-		2,
-		[]Need{
-			{CopperIngot, 1},
-		},
-	}
+		"Steel Pipe": {RecipeBook{
+			Recipe{6, 2, []Ingredient{
+				{"Steel Ingot", 3},
+			}},
+			map[string]Recipe{},
+		}},
 
-	CopperIngot = Recipe{
-		"Copper Ingot",
-		2,
-		1,
-		[]Need{
-			{CopperOre, 1},
-		},
-	}
+		"Wire": {RecipeBook{
+			Recipe{4, 2, []Ingredient{
+				{"Copper Ingot", 1},
+			}},
+			map[string]Recipe{},
+		}},
 
-	CrudeOil = Recipe{ // Oil Extractor Mk. 1
-		"Crude Oil",
-		60,
-		120,
-		[]Need{},
-	}
+		// Assembled
+		"Automated Wiring": {RecipeBook{
+			Recipe{24, 1, []Ingredient{
+				{"Stator", 1},
+				{"Cable", 20},
+			}},
+			map[string]Recipe{},
+		}},
 
-	ReinforcedIronPlate = Recipe{
-		"Reinforced Iron Plate",
-		12,
-		1,
-		[]Need{
-			{IronPlate, 6},
-			{Screw, 12},
-		},
-	}
+		"Circuit Board": {RecipeBook{
+			Recipe{8, 1, []Ingredient{
+				{"Copper Sheet", 2},
+				{"Plastic", 4},
+			}},
+			map[string]Recipe{},
+		}},
 
-	IronRod = Recipe{
-		"Iron Rod",
-		4,
-		1,
-		[]Need{
-			{IronIngot, 1},
-		},
-	}
+		"Encased Industrial Beam": {RecipeBook{
+			Recipe{10, 1, []Ingredient{
+				{"Steel Beam", 4},
+				{"Concrete", 5},
+			}},
+			map[string]Recipe{},
+		}},
 
-	SteelIngot = Recipe{
-		"Steel Ingot",
-		4,
-		3,
-		[]Need{
-			{IronOre, 3},
-			{Coal, 3},
-		},
-	}
+		"Modular Frame": {RecipeBook{
+			Recipe{60, 2, []Ingredient{
+				{"Reinforced Iron Plate", 3},
+				{"Iron Rod", 12},
+			}},
+			map[string]Recipe{},
+		}},
 
-	SteelBeam = Recipe{
-		"Steel Beam",
-		4,
-		1,
-		[]Need{
-			{SteelIngot, 4},
-		},
-	}
+		"Reinforced Iron Plate": {RecipeBook{
+			Recipe{12, 1, []Ingredient{
+				{"Iron Plate", 6},
+				{"Screw", 12},
+			}},
+			map[string]Recipe{},
+		}},
 
-	Concrete = Recipe{
-		"Concrete",
-		4,
-		1,
-		[]Need{
-			{Limestone, 3},
-		},
-	}
+		"Stator": {RecipeBook{
+			Recipe{12, 1, []Ingredient{
+				{"Steel Pipe", 3},
+				{"Wire", 8},
+			}},
+			map[string]Recipe{},
+		}},
 
-	CopperOre = Recipe{ // Miner Mk. 2 Normal
-		"Copper Ore",
-		60,
-		120,
-		[]Need{},
-	}
+		// Manufactured
+		"Adaptive Control Unit": {RecipeBook{
+			Recipe{120, 2, []Ingredient{
+				{"Automated Wiring", 15},
+				{"Circuit Board", 10},
+				{"Heavy Modular Frame", 2},
+				{"Computer", 2},
+			}},
+			map[string]Recipe{},
+		}},
 
-	IronPlate = Recipe{
-		"Iron Plate",
-		6,
-		2,
-		[]Need{
-			{IronIngot, 3},
-		},
-	}
+		"Computer": {RecipeBook{
+			Recipe{24, 1, []Ingredient{
+				{"Circuit Board", 10},
+				{"Cable", 9},
+				{"Plastic", 18},
+				{"Screw", 52},
+			}},
+			map[string]Recipe{},
+		}},
 
-	IronIngot = Recipe{
-		"Iron Ingot",
-		2,
-		1,
-		[]Need{
-			{IronOre, 1},
-		},
-	}
+		"Heavy Modular Frame": {RecipeBook{
+			Recipe{8, 1, []Ingredient{
+				{"Modular Frame", 5},
+				{"Steel Pipe", 15},
+				{"Encased Industrial Beam", 5},
+				{"Screw", 100},
+			}},
+			map[string]Recipe{},
+		}},
 
-	IronOre = Recipe{ // Miner Mk. 2 Normal
-		"Iron Ore",
-		60,
-		120,
-		[]Need{},
-	}
-
-	Coal = Recipe{ // Miner Mk. 2 Normal
-		"Coal",
-		60,
-		120,
-		[]Need{},
-	}
-
-	Limestone = Recipe{ // Miner Mk. 2 Normal
-		"Limestone",
-		60,
-		120,
-		[]Need{},
+		// Refined
+		"Plastic": {RecipeBook{
+			Recipe{6, 1, []Ingredient{
+				{"Copper Ingot", 2},
+			}},
+			map[string]Recipe{},
+		}},
 	}
 )
 
-func CountNeeds(totals *Totals, recipe Recipe) {
-	for _, need := range recipe.Needs {
-		period := recipe.Time / need.Recipe.Time               // How many cycles of the needed Product occur during the needing Product's cycle
-		periodProductionAmount := period * need.Recipe.Amount  // How many needed Products are produced during the needing Product's cycle
-		buildingAmount := need.Amount / periodProductionAmount // How many buildings are required to fulfill the need
-		(*totals)[need.Recipe.Name] = (*totals)[need.Recipe.Name] + buildingAmount
+func PreferRecipe(productName string) Recipe {
+	recipe := Products[productName].Recipes.Default
+	if val, ok := ActiveAlternates[productName]; ok {
+		recipe = Products[productName].Recipes.Alternates[val]
+	}
+	return recipe
+}
 
-		// Recursively tally remaining needs
-		if len(need.Recipe.Needs) > 0 {
-			CountNeeds(totals, need.Recipe)
+func TallyIngredients(productName string, tally *map[string]float64) {
+	recipe := PreferRecipe(productName)
+
+	for _, ingredient := range recipe.Ingredients {
+		nestedRecipe := PreferRecipe(ingredient.ProductName)
+		period := recipe.Time / nestedRecipe.Time                    // How many cycles of the needed Recipe occur during the needing Recipe's cycle
+		periodProductionAmount := period * nestedRecipe.Amount       // How many Ingredients are produced during the needing Recipe's cycle
+		buildingAmount := ingredient.Amount / periodProductionAmount // How many buildings are required to fulfill the need
+		(*tally)[ingredient.ProductName] = (*tally)[ingredient.ProductName] + buildingAmount
+
+		if len(nestedRecipe.Ingredients) > 0 {
+			TallyIngredients(ingredient.ProductName, tally)
 		}
 	}
 }
 
 func main() {
-	totals := &Totals{}
-	CountNeeds(totals, AdaptiveControlUnit)
-	for product, buildingAmount := range *totals {
-		fmt.Println(product, buildingAmount)
+	tally := &map[string]float64{}
+	TallyIngredients("Adaptive Control Unit", tally)
+	for product, amount := range *tally {
+		fmt.Println(product, amount)
 	}
 }
