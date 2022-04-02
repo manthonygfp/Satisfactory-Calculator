@@ -6,8 +6,6 @@ import (
 
 // TODO:
 // * Tally up by-products
-// * Recipe selection
-// * Figure out how to show mining requirements by ore/min instead of buildings (with static size and purity)
 
 type RecipeBook struct {
 	Default    Recipe
@@ -31,7 +29,9 @@ type Ingredient struct {
 
 type Tally struct {
 	Extracted map[string]float64
-	Processed map[string]float64
+	Small     map[string]float64
+	Medium    map[string]float64
+	Large     map[string]float64
 }
 
 var (
@@ -242,26 +242,57 @@ func PreferRecipe(productName string) Recipe {
 	return recipe
 }
 
-func TallyIngredients(productName string, tally *map[string]float64) {
+func TallyIngredients(productName string, tally *Tally) {
 	recipe := PreferRecipe(productName)
 
 	for _, ingredient := range recipe.Ingredients {
-		nestedRecipe := PreferRecipe(ingredient.ProductName)
-		period := recipe.Time / nestedRecipe.Time                    // How many cycles of the needed Recipe occur during the needing Recipe's cycle
-		periodProductionAmount := period * nestedRecipe.Amount       // How many Ingredients are produced during the needing Recipe's cycle
-		buildingAmount := ingredient.Amount / periodProductionAmount // How many buildings are required to fulfill the need
-		(*tally)[ingredient.ProductName] = (*tally)[ingredient.ProductName] + buildingAmount
+		ingredientRecipe := PreferRecipe(ingredient.ProductName)
 
-		if len(nestedRecipe.Ingredients) > 0 {
-			TallyIngredients(ingredient.ProductName, tally)
+		if len(ingredientRecipe.Ingredients) == 0 {
+			(*tally).Extracted[ingredient.ProductName] = (*tally).Extracted[ingredient.ProductName] + (60 / recipe.Time * ingredient.Amount)
+		} else {
+			period := recipe.Time / ingredientRecipe.Time                // How many cycles of the needed Recipe occur during the needing Recipe's cycle
+			periodProductionAmount := period * ingredientRecipe.Amount   // How many Ingredients are produced during the needing Recipe's cycle
+			buildingAmount := ingredient.Amount / periodProductionAmount // How many buildings are required to fulfill the need
+			switch len(ingredientRecipe.Ingredients) {
+			case 1:
+				(*tally).Small[ingredient.ProductName] = (*tally).Small[ingredient.ProductName] + buildingAmount
+			case 2:
+				(*tally).Medium[ingredient.ProductName] = (*tally).Medium[ingredient.ProductName] + buildingAmount
+			case 3, 4:
+				(*tally).Large[ingredient.ProductName] = (*tally).Large[ingredient.ProductName] + buildingAmount
+			}
 		}
+
+		TallyIngredients(ingredient.ProductName, tally)
 	}
 }
 
 func main() {
-	tally := &map[string]float64{}
+	tally := &Tally{map[string]float64{}, map[string]float64{}, map[string]float64{}, map[string]float64{}} // TODO: ew
 	TallyIngredients("Adaptive Control Unit", tally)
-	for product, amount := range *tally {
+
+	fmt.Println("Amount needed to be extracted per minute:")
+	for product, amount := range *&tally.Extracted {
 		fmt.Println(product, amount)
+	}
+	fmt.Println()
+
+	fmt.Println("Building amount required for processing:")
+	sections := []map[string]map[string]float64{
+		{"One ingredient: ": tally.Small},
+		{"Two ingredients: ": tally.Medium},
+		{"Three or more ingredients: ": tally.Large},
+	}
+	for _, section := range sections {
+		for title, tally := range section {
+			fmt.Println(title)
+
+			for product, amount := range tally {
+				fmt.Println(product, amount)
+			}
+
+			fmt.Println()
+		}
 	}
 }
